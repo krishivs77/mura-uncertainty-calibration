@@ -1,294 +1,247 @@
-# Reliable MURA X-ray
+# Reliable Abnormality Detection in Musculoskeletal X-rays Using Calibration and Uncertainty Estimation
 
-Uncertainty-aware abnormality detection in musculoskeletal X-rays using calibration, threshold analysis, and corruption robustness testing.
+This project studies reliability in deep learning models for musculoskeletal X-ray abnormality detection using the MURA v1.1 dataset.
 
-This project studies whether deep learning models for medical image classification can produce confidence scores that are actually useful. Using the MURA v1.1 musculoskeletal X-ray dataset, I trained ResNet-based abnormality classifiers and evaluated not only clean validation performance, but also calibration, temperature scaling, robustness under image corruptions, threshold tradeoffs, and high-confidence failure cases.
+Instead of only optimizing classification accuracy, the project asks whether X-ray classifiers produce confidence scores that remain meaningful under clean validation data, study-level aggregation, image corruptions, and test-time augmentation.
 
-The goal is not just to ask:
-
-> Can the model classify X-rays as normal or abnormal?
-
-but also:
-
-> Does the model know when it might be wrong?
-
----
+The main goal is to evaluate not just whether a model is correct, but whether it knows when it may be wrong.
 
 ## Research Question
 
-Can musculoskeletal X-ray classifiers produce confidence scores that remain reliable under clean and shifted image conditions?
+Can convolutional neural networks classify normal versus abnormal musculoskeletal X-rays while producing reliable uncertainty and confidence estimates?
 
 More specifically, this project evaluates:
 
-- binary abnormality detection on MURA X-rays
-- calibration of predicted probabilities
-- post-hoc temperature scaling
-- robustness under synthetic image corruptions
-- sensitivity/specificity tradeoffs across decision thresholds
-- high-confidence false positive and false negative failure cases
-
----
+- Image-level classification performance
+- Calibration before and after temperature scaling
+- Study-level aggregation across multiple X-ray views
+- Study-level temperature scaling
+- Robustness under synthetic image corruptions
+- Threshold tradeoffs between sensitivity and specificity
+- Test-time augmentation uncertainty
+- High-confidence failure cases
 
 ## Dataset
 
-This project uses the MURA v1.1 musculoskeletal X-ray dataset, which contains upper-extremity X-ray studies labeled as normal or abnormal.
+This project uses the MURA v1.1 musculoskeletal X-ray dataset.
 
-After preprocessing and removing invalid AppleDouble metadata files, the cleaned dataset contained:
+MURA contains upper-extremity X-ray studies labeled as normal or abnormal across multiple body parts, including wrist, shoulder, hand, finger, elbow, forearm, and humerus.
 
-| Split | Images |
-|---|---:|
-| Train | 36,808 |
-| Validation | 3,197 |
-| Total | 40,005 |
+This repository does not include the MURA image files. Users must obtain access separately and place the dataset locally at:
 
-The dataset includes seven body-part categories:
+```text
+data/raw/MURA-v1.1/
+```
 
-- `XR_WRIST`
-- `XR_SHOULDER`
-- `XR_HAND`
-- `XR_FINGER`
-- `XR_ELBOW`
-- `XR_FOREARM`
-- `XR_HUMERUS`
+The processed manifest used in this project contains:
 
-Labels were parsed from study folder names:
-
-| Folder pattern | Label |
-|---|---|
-| `study*_negative` | normal |
-| `study*_positive` | abnormal |
-
-A manifest file was generated with image path, split, body part, patient ID, study ID, label, and label name.
-
----
+```text
+40,005 total images
+36,808 training images
+3,197 validation images
+1,199 validation studies
+7 body parts
+2 classes: normal and abnormal
+```
 
 ## Methods
 
-### Models
+Two ImageNet-pretrained CNN backbones were fine-tuned for binary abnormality classification:
 
-Two ImageNet-pretrained ResNet backbones were fine-tuned for binary abnormality classification:
+```text
+ResNet18
+ResNet50
+```
 
-| Model | Input size | Output |
-|---|---|---|
-| ResNet18 | 224 × 224 RGB | single abnormality logit |
-| ResNet50 | 224 × 224 RGB | single abnormality logit |
+Each model outputs a single abnormality logit. The sigmoid probability is interpreted as the model’s estimated probability that an image is abnormal.
 
-Although MURA images are grayscale, they were converted to 3-channel RGB to use standard ImageNet-pretrained torchvision models.
+The project evaluates reliability using:
 
-### Evaluation
+```text
+ECE: Expected Calibration Error
+Brier score
+Negative log-likelihood
+Overconfidence gap
+Temperature scaling
+Study-level aggregation
+Test-time augmentation uncertainty
+Corruption stress tests
+Threshold analysis
+Failure-case visualization
+```
 
-The project evaluates each model using:
+## Image-Level Results
 
-- accuracy
-- AUROC
-- precision
-- recall / sensitivity
-- specificity
-- F1 score
-- confusion matrix
-- expected calibration error, 10 bins
-- Brier score
-- negative log likelihood
-- mean confidence
-- overconfidence gap
+Validation performance was first evaluated at the image level using the 3,197 MURA validation images.
 
-### Calibration
+| Model | Accuracy | AUROC | Precision | Sensitivity | Specificity | F1 | ECE |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ResNet18 | 0.8001 | 0.8688 | 0.8383 | 0.7216 | 0.8722 | 0.7756 | 0.0202 |
+| ResNet50 | **0.8151** | **0.8741** | **0.8922** | 0.6980 | **0.9226** | **0.7833** | 0.0370 |
 
-Temperature scaling was applied as a post-hoc calibration method using clean validation logits. Temperature scaling changes probability confidence but does not change the ranking of predictions, so accuracy, AUROC, and F1 at threshold 0.5 remain unchanged.
+ResNet50 achieved stronger overall classification performance, with higher accuracy, AUROC, precision, specificity, and F1. However, it had worse calibration than ResNet18 before post-hoc calibration.
 
-### Robustness Stress Testing
+## Temperature Scaling
 
-Validation images were corrupted using controlled synthetic transformations:
+Temperature scaling was applied as a post-hoc calibration method. A learned temperature greater than 1 softens the predicted probabilities, reducing overconfidence.
 
-- Gaussian noise
-- Gaussian blur
-- brightness decrease
-- brightness increase
-- contrast decrease
-- contrast increase
+| Model | Temperature | ECE Before | ECE After | Brier Before | Brier After | NLL Before | NLL After |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ResNet18 | 1.1216 | 0.0202 | 0.0134 | 0.1419 | 0.1420 | 0.4462 | 0.4444 |
+| ResNet50 | 1.2261 | 0.0370 | **0.0094** | 0.1373 | **0.1366** | 0.4437 | **0.4369** |
 
-Each corruption was evaluated at severity levels 1 through 4. The purpose was to test whether model confidence decreases when image quality degrades.
+Temperature scaling substantially improved calibration, especially for ResNet50.
 
-### Threshold Analysis
+The stronger ResNet50 model was more overconfident before calibration, but after temperature scaling it achieved the best overall calibrated image-level performance.
 
-The default threshold of 0.5 was compared against thresholds from 0.05 to 0.95. This was used to study the clinical tradeoff between sensitivity and specificity.
+## Study-Level Aggregation
 
-### Failure-Case Visualization
+MURA labels are study-level labels, while each study may contain multiple images. To better align evaluation with the dataset structure, image-level probabilities were aggregated into study-level predictions.
 
-Representative prediction cases were visualized, including:
+Three aggregation methods were tested:
 
-- confident correct normal predictions
-- confident correct abnormal predictions
-- uncertain wrong predictions
-- high-confidence false negatives
-- high-confidence false positives
+```text
+mean: average probability across all images in a study
+max: maximum abnormal probability across images
+top2_mean: average of the two highest abnormal probabilities
+```
 
----
+### ResNet50 Study-Level Results
 
-## Clean Validation Results
-
-### Model Comparison
-
-| Model | Accuracy | AUROC | Precision | Sensitivity | Specificity | F1 |
+| Aggregation | Accuracy | AUROC | Sensitivity | Specificity | F1 | ECE |
 |---|---:|---:|---:|---:|---:|---:|
-| ResNet18 | 0.8001 | 0.8688 | 0.8383 | 0.7216 | 0.8722 | 0.7756 |
-| ResNet50 | **0.8151** | **0.8741** | **0.8922** | 0.6980 | **0.9226** | **0.7833** |
+| mean | 0.8232 | **0.8819** | 0.6840 | **0.9365** | 0.7764 | **0.0156** |
+| max | 0.8207 | 0.8806 | **0.7584** | 0.8714 | **0.7915** | 0.0266 |
+| top2_mean | **0.8249** | 0.8809 | 0.7119 | 0.9168 | 0.7848 | 0.0208 |
 
-ResNet50 improved clean accuracy, AUROC, precision, specificity, and F1 compared to ResNet18. However, at the default 0.5 threshold, ResNet50 had lower sensitivity, meaning it missed more abnormal cases.
+Study-level aggregation improved performance relative to image-level evaluation. The aggregation rule controlled the clinical tradeoff: mean aggregation was more specific and better calibrated, while max aggregation improved sensitivity and F1.
 
-### Confusion Matrices
+## Study-Level Temperature Scaling
 
-#### ResNet18
+Temperature scaling was also learned directly at the study level by optimizing the final aggregated study probabilities.
 
-|  | Predicted normal | Predicted abnormal |
-|---|---:|---:|
-| True normal | 1454 | 213 |
-| True abnormal | 426 | 1104 |
+| Model | Aggregation | Study Temperature | Vanilla NLL | Scaled NLL | Vanilla ECE | Scaled ECE |
+|---|---|---:|---:|---:|---:|---:|
+| ResNet18 | mean | 1.00 | 0.4280 | 0.4280 | 0.0267 | 0.0267 |
+| ResNet18 | max | 1.18 | 0.4558 | 0.4525 | 0.0213 | 0.0290 |
+| ResNet18 | top2_mean | 1.04 | 0.4315 | 0.4314 | 0.0193 | 0.0273 |
+| ResNet50 | mean | 1.14 | 0.4274 | 0.4250 | **0.0156** | 0.0191 |
+| ResNet50 | max | 1.17 | 0.4329 | 0.4292 | 0.0266 | **0.0188** |
+| ResNet50 | top2_mean | 1.12 | 0.4225 | **0.4207** | 0.0208 | 0.0200 |
 
-#### ResNet50
+Study-level temperature scaling improved negative log-likelihood across ResNet50 aggregation methods. ECE improvements depended on the aggregation rule, suggesting that calibration should be evaluated at the same prediction level where the model is deployed.
 
-|  | Predicted normal | Predicted abnormal |
-|---|---:|---:|
-| True normal | 1538 | 129 |
-| True abnormal | 462 | 1068 |
+## Test-Time Augmentation Uncertainty
 
-At threshold 0.5, ResNet50 was more conservative: it produced fewer false positives but more false negatives.
+Test-time augmentation was used as a lightweight uncertainty estimation method. Each validation image was evaluated under eight mild deterministic perturbations:
 
----
+```text
+original image
+brightness down
+brightness up
+contrast down
+contrast up
+rotation -5 degrees
+rotation +5 degrees
+slight center crop
+```
 
-## Calibration Results
+The mean probability was used for classification. Prediction variance, entropy, and margin uncertainty were used as uncertainty signals.
 
-### Before Temperature Scaling
+| Model | Accuracy | AUROC | F1 | ECE | Entropy Error-Detection AUROC | Margin Error-Detection AUROC |
+|---|---:|---:|---:|---:|---:|---:|
+| ResNet18 + TTA | 0.8017 | 0.8708 | 0.7835 | **0.0153** | **0.7375** | **0.7375** |
+| ResNet50 + TTA | **0.8183** | **0.8745** | **0.7894** | 0.0191 | 0.7167 | 0.7167 |
 
-| Model | ECE | Brier score | NLL | Mean confidence | Overconfidence gap |
-|---|---:|---:|---:|---:|---:|
-| ResNet18 | **0.0202** | 0.1419 | 0.4462 | 0.8101 | +0.0100 |
-| ResNet50 | 0.0370 | **0.1373** | **0.4437** | 0.8425 | +0.0274 |
-
-ResNet50 had better Brier score and NLL, but worse ECE and a larger overconfidence gap. This suggests that ResNet50 was more accurate overall, but also more overconfident before calibration.
-
-### Temperature Scaling
-
-| Model | Temperature | ECE before | ECE after | NLL before | NLL after |
-|---|---:|---:|---:|---:|---:|
-| ResNet18 | 1.1216 | 0.0202 | 0.0134 | 0.4462 | 0.4444 |
-| ResNet50 | 1.2261 | 0.0370 | **0.0094** | 0.4437 | **0.4369** |
-
-Both learned temperatures were greater than 1, indicating mild overconfidence. ResNet50 required stronger softening, but after temperature scaling it achieved the best clean calibration.
-
-Temperature scaling preserved classification performance while improving probability calibration:
-
-| Model | Accuracy | AUROC | F1 | Temp-scaled ECE | Temp-scaled overconfidence gap |
-|---|---:|---:|---:|---:|---:|
-| ResNet18 | 0.8001 | 0.8688 | 0.7756 | 0.0134 | -0.0074 |
-| ResNet50 | **0.8151** | **0.8741** | **0.7833** | **0.0094** | -0.0063 |
-
----
-
-## Robustness Under Image Corruptions
-
-The models were evaluated under corrupted validation images. The table below shows selected severe corruption conditions.
-
-| Model | Corruption | Severity | Accuracy | AUROC | ECE | Mean confidence | Temp-scaled ECE |
-|---|---|---:|---:|---:|---:|---:|---:|
-| ResNet18 | clean | 0 | 0.8001 | 0.8688 | 0.0202 | 0.8101 | 0.0130 |
-| ResNet18 | Gaussian noise | 4 | 0.5427 | 0.5603 | 0.0731 | 0.6158 | 0.0605 |
-| ResNet18 | blur | 4 | 0.6647 | 0.7294 | 0.0405 | 0.7051 | 0.0241 |
-| ResNet18 | brightness up | 4 | 0.7582 | 0.8315 | 0.0427 | 0.8009 | 0.0268 |
-| ResNet18 | contrast up | 4 | 0.7748 | 0.8427 | 0.0444 | 0.8171 | 0.0270 |
-| ResNet50 | clean | 0 | 0.8151 | 0.8741 | 0.0370 | 0.8425 | 0.0094 |
-| ResNet50 | Gaussian noise | 4 | 0.5317 | 0.4456 | 0.1798 | 0.7116 | 0.1448 |
-| ResNet50 | blur | 4 | 0.6325 | 0.6997 | 0.0423 | 0.6748 | 0.0359 |
-| ResNet50 | brightness up | 4 | 0.7792 | 0.8377 | 0.0497 | 0.8288 | 0.0241 |
-| ResNet50 | contrast up | 4 | 0.7911 | 0.8458 | 0.0563 | 0.8414 | 0.0254 |
-
-### Robustness Findings
-
-Temperature scaling substantially improved calibration on clean data and reduced overconfidence under brightness and contrast shifts.
+Incorrect predictions had higher uncertainty than correct predictions.
 
 For ResNet50:
 
-| Condition | Vanilla ECE | Temp-scaled ECE |
-|---|---:|---:|
-| Clean | 0.0370 | 0.0094 |
-| Brightness up, severity 4 | 0.0497 | 0.0241 |
-| Contrast up, severity 4 | 0.0563 | 0.0254 |
-| Gaussian noise, severity 4 | 0.1786 | 0.1448 |
+```text
+Correct prediction entropy:    0.3630
+Incorrect prediction entropy:  0.5076
+```
 
-The most important failure mode was severe Gaussian noise. Under Gaussian noise severity 4, ResNet50 reached an AUROC below 0.5 and remained substantially miscalibrated even after temperature scaling.
+For ResNet18:
 
-This suggests that post-hoc calibration helps, but does not guarantee reliable confidence under severe distribution shift.
+```text
+Correct prediction entropy:    0.3967
+Incorrect prediction entropy:  0.5608
+```
 
----
+This suggests that TTA uncertainty can help flag unreliable predictions, although it does not eliminate all high-confidence failures.
+
+## Robustness Under Image Corruptions
+
+Models were evaluated under synthetic image corruptions, including Gaussian noise, blur, brightness shifts, and contrast shifts.
+
+Selected ResNet50 results:
+
+| Condition | Severity | Accuracy | AUROC | F1 | ECE | Mean Confidence |
+|---|---:|---:|---:|---:|---:|---:|
+| clean | 0 | 0.8151 | 0.8741 | 0.7833 | 0.0370 | 0.8425 |
+| gaussian_noise | 4 | 0.5317 | 0.4456 | 0.0507 | 0.1798 | 0.7116 |
+| blur | 4 | 0.6325 | 0.6997 | 0.6154 | 0.0423 | 0.6748 |
+| brightness_up | 4 | 0.7792 | 0.8377 | 0.7328 | 0.0497 | 0.8288 |
+| contrast_up | 4 | 0.7911 | 0.8458 | 0.7539 | 0.0563 | 0.8414 |
+
+Severe Gaussian noise caused the largest reliability failure: performance dropped sharply while confidence remained high. This shows that good clean calibration does not guarantee robustness under distribution shift.
 
 ## Threshold Analysis
 
-At the default threshold of 0.5, ResNet50 had higher specificity but lower sensitivity than ResNet18. Threshold analysis showed that this was partly an operating-point issue.
+The default 0.5 threshold was not always the best operating point.
 
-### Best-F1 Operating Points
+For ResNet50, lowering the threshold improved F1 and sensitivity:
 
-| Model | Probability type | Threshold | Accuracy | Sensitivity | Specificity | F1 |
+| Probability Type | Operating Point | Threshold | Accuracy | Sensitivity | Specificity | F1 |
 |---|---|---:|---:|---:|---:|---:|
-| ResNet18 | vanilla | 0.40 | 0.7939 | 0.7889 | 0.7984 | 0.7856 |
-| ResNet18 | temperature scaled | 0.45 | 0.8011 | 0.7634 | 0.8356 | 0.7860 |
-| ResNet50 | vanilla | 0.30 | 0.8167 | **0.8007** | 0.8314 | **0.8070** |
-| ResNet50 | temperature scaled | 0.35 | **0.8183** | 0.7895 | **0.8446** | 0.8061 |
+| vanilla | default | 0.50 | 0.8151 | 0.6980 | 0.9226 | 0.7833 |
+| vanilla | best F1 | 0.30 | 0.8167 | 0.8007 | 0.8314 | **0.8070** |
+| temperature scaled | best F1 | 0.35 | **0.8183** | 0.7895 | 0.8446 | 0.8061 |
 
-After threshold tuning, ResNet50 achieved the best F1 score and a better sensitivity-specificity balance.
-
-### High-Sensitivity Operating Points
-
-For a screening-style setting with sensitivity greater than or equal to 0.90:
-
-| Model | Probability type | Threshold | Sensitivity | Specificity | False positives | False negatives |
-|---|---|---:|---:|---:|---:|---:|
-| ResNet18 | vanilla | 0.20 | 0.9065 | 0.5153 | 808 | 143 |
-| ResNet18 | temperature scaled | 0.20 | 0.9242 | 0.4607 | 899 | 116 |
-| ResNet50 | vanilla | 0.10 | **0.9438** | 0.3641 | 1060 | **86** |
-| ResNet50 | temperature scaled | 0.15 | 0.9346 | 0.3911 | 1015 | 100 |
-
-Lowering the threshold reduces missed abnormalities but substantially increases false positives. This reflects a realistic clinical tradeoff between screening sensitivity and unnecessary follow-up.
-
----
+This shows that ResNet50’s lower sensitivity at the default threshold was partly an operating-point issue rather than only a model-capacity issue.
 
 ## Failure-Case Analysis
 
-Failure-case visualization showed that calibration improvements at the aggregate level do not eliminate individual confident mistakes.
+High-confidence failure cases were visualized for the calibrated ResNet50 model.
 
-The most clinically important examples were high-confidence false negatives: abnormal images predicted as normal with confidence above 0.93 after temperature scaling.
+The most important failure type was high-confidence false negatives: abnormal studies predicted as normal with high confidence. These cases are clinically important because they show that calibration and uncertainty methods improve aggregate reliability but do not guarantee safety on every individual prediction.
 
-These cases highlight a key limitation:
+Example figure paths:
 
-> A model can be well-calibrated on average while still producing individual high-confidence errors.
-
-Uncertain wrong cases were also observed, where predicted probabilities were close to 0.5. These are less concerning because the model does not strongly commit to an incorrect label.
-
----
+```text
+assets/figures/resnet50_reliability_diagram.png
+assets/figures/resnet50_temp_scaled_ece_under_corruption.png
+assets/figures/resnet50_threshold_sensitivity_specificity.png
+assets/figures/resnet50_confident_false_negatives.png
+assets/figures/resnet50_uncertain_wrong.png
+```
 
 ## Key Findings
 
-1. ResNet50 slightly improved clean classification performance over ResNet18.
-2. ResNet50 was more overconfident before calibration.
-3. Temperature scaling improved clean calibration, especially for ResNet50.
-4. Temperature scaling reduced overconfidence under brightness and contrast shifts.
-5. Severe Gaussian noise remained a major unresolved failure mode.
-6. Threshold tuning showed that ResNet50’s lower sensitivity at threshold 0.5 was partly an operating-point issue.
-7. High-confidence false negatives remained even after temperature scaling.
+1. ResNet50 achieved the strongest image-level classification performance, but it was less calibrated than ResNet18 before temperature scaling.
 
----
+2. Temperature scaling substantially improved image-level calibration, especially for ResNet50.
+
+3. Study-level aggregation improved performance relative to image-level evaluation and better matched the structure of the MURA dataset.
+
+4. The aggregation rule controlled sensitivity-specificity tradeoffs: mean aggregation was more specific, max aggregation was more sensitive, and top2_mean provided a balanced alternative.
+
+5. Study-level temperature scaling improved ResNet50 negative log-likelihood across aggregation methods, but ECE improvements depended on the aggregation rule.
+
+6. Test-time augmentation provided a useful uncertainty signal. Incorrect predictions had higher entropy and margin uncertainty than correct predictions.
+
+7. Severe image corruptions revealed reliability failures that were not visible from clean validation metrics alone.
+
+8. High-confidence false negatives remained, showing that calibration and uncertainty estimation are useful risk signals but not safety guarantees.
 
 ## Repository Structure
 
 ```text
-reliable-mura-xray/
-  data/
-    raw/                  # ignored; contains MURA images locally
-    manifests/            # generated manifest CSV
-  outputs/
-    evaluation/           # metrics, predictions, figures
-    reports/              # generated comparison summaries
-  reports/
-    final_analysis.md     # paper-style writeup
+mura-uncertainty-calibration/
+  README.md
+  requirements.txt
+
   src/
     data/
       build_manifest.py
@@ -296,8 +249,10 @@ reliable-mura-xray/
       visualize_samples.py
       mura_dataset.py
       check_dataloader.py
+
     models/
       train_baseline.py
+
     evaluation/
       evaluate_baseline.py
       calibration_analysis.py
@@ -308,117 +263,133 @@ reliable-mura-xray/
       summarize_robustness.py
       threshold_analysis.py
       summarize_thresholds.py
+      study_level_aggregation.py
+      study_level_temperature_scaling.py
+      tta_uncertainty.py
+
     visualization/
       failure_cases.py
-```
 
----
+  results/
+    model_comparison.csv
+    robustness_summary.csv
+    threshold_summary.csv
+    study_level_summary_vanilla.csv
+    study_level_summary_temperature_scaled.csv
+    study_level_temperature_scaling_summary.csv
+    tta_uncertainty_summary.csv
+
+  reports/
+    final_analysis.md
+
+  assets/
+    figures/
+```
 
 ## How to Run
 
-### 1. Build the manifest
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Expected local data layout:
+
+```text
+data/raw/MURA-v1.1/
+data/manifests/mura_manifest.csv
+```
+
+Build or inspect the manifest:
 
 ```bash
 python -m src.data.build_manifest
-```
-
-### 2. Inspect the dataset
-
-```bash
 python -m src.data.inspect_manifest
-python -m src.data.visualize_samples
-python -m src.data.check_dataloader
 ```
 
-### 3. Train a baseline model
-
-Set the backbone in `src/models/train_baseline.py`, then run:
+Train a baseline model:
 
 ```bash
-python -m src.models.train_baseline
+python -m src.models.train_baseline --backbone resnet18
+python -m src.models.train_baseline --backbone resnet50
 ```
 
-### 4. Evaluate a trained model
+Evaluate a trained model:
 
 ```bash
-python -m src.evaluation.evaluate_baseline --backbone resnet18
 python -m src.evaluation.evaluate_baseline --backbone resnet50
 ```
 
-### 5. Run calibration analysis
+Run calibration analysis:
 
 ```bash
-python -m src.evaluation.calibration_analysis --backbone resnet18
 python -m src.evaluation.calibration_analysis --backbone resnet50
-```
-
-### 6. Run temperature scaling
-
-```bash
-python -m src.evaluation.temperature_scaling --backbone resnet18
 python -m src.evaluation.temperature_scaling --backbone resnet50
 ```
 
-### 7. Run corruption stress tests
+Run robustness tests:
 
 ```bash
-python -m src.evaluation.stress_test_corruptions --backbone resnet18
 python -m src.evaluation.stress_test_corruptions --backbone resnet50
-```
-
-### 8. Run temperature-scaled stress tests
-
-```bash
-python -m src.evaluation.stress_test_temperature_scaled --backbone resnet18
 python -m src.evaluation.stress_test_temperature_scaled --backbone resnet50
 ```
 
-### 9. Generate summary reports
+Run study-level evaluation:
 
 ```bash
-python -m src.evaluation.compare_models
-python -m src.evaluation.summarize_robustness
-python -m src.evaluation.summarize_thresholds
+python -m src.evaluation.study_level_aggregation
+python -m src.evaluation.study_level_aggregation --use-temp-scaled
 ```
 
-### 10. Generate failure-case visualizations
+Run study-level temperature scaling:
 
 ```bash
-python -m src.visualization.failure_cases --backbone resnet50 --use-temp-scaled
+python -m src.evaluation.study_level_temperature_scaling --backbone resnet50 --aggregation mean
+python -m src.evaluation.study_level_temperature_scaling --backbone resnet50 --aggregation max
+python -m src.evaluation.study_level_temperature_scaling --backbone resnet50 --aggregation top2_mean
 ```
 
----
+Run TTA uncertainty:
+
+```bash
+python -m src.evaluation.tta_uncertainty \
+  --backbone resnet50 \
+  --checkpoint-path outputs/checkpoints/baseline_resnet50_best.pt \
+  --batch-size 16
+```
 
 ## Limitations
 
-This project is an experimental research-style analysis, not a clinical system.
+This project is a research-style reliability analysis, not a clinical diagnostic system.
 
-Current limitations include:
+Important limitations:
 
-- Evaluation is primarily image-level, while MURA labels are study-level.
-- No external validation dataset was used.
-- Synthetic corruptions are controlled stress tests, not perfect substitutes for real scanner or hospital domain shift.
-- The models are standard CNN baselines rather than medical-domain foundation models.
-- Temperature scaling was learned on clean validation data and may not generalize to all shifted conditions.
-- High-confidence false negatives remain possible even after calibration.
+- MURA labels are study-level, while some experiments use image-level evaluation.
+- Evaluation is performed on the MURA validation set, not an external hospital dataset.
+- Synthetic corruptions do not fully represent real clinical distribution shifts.
+- The models are standard CNN baselines, not specialized radiology architectures.
+- Temperature scaling improves aggregate calibration but does not eliminate individual high-confidence errors.
+- TTA uncertainty helps flag risky predictions but is not a guarantee of correctness.
+- No clinician review was performed for failure cases.
 
----
-
-## Next Steps
+## Future Work
 
 Potential extensions include:
 
-- study-level aggregation of image predictions
-- additional backbones such as ResNet152, DenseNet121, and EfficientNet
-- higher-resolution training
-- multi-seed robustness evaluation
-- test-time augmentation uncertainty
-- Monte Carlo dropout uncertainty
-- external validation on another musculoskeletal X-ray dataset
-- cleaner public repo release
+- External validation on another musculoskeletal X-ray dataset
+- Multi-seed training for stronger statistical confidence
+- Higher-resolution training
+- DenseNet or EfficientNet baselines
+- Study-level calibration with a held-out calibration split
+- MC dropout or deep ensembles
+- Body-part-specific calibration analysis
+- Clinical review of high-confidence false negatives
 
----
+## Conclusion
 
-## Project Goal
+This project shows that musculoskeletal X-ray classifiers should be evaluated beyond accuracy alone.
 
-This project evaluates abnormality detection through the lens of trustworthiness rather than accuracy alone. In medical AI, a model that is confidently wrong can be more concerning than a model that is uncertain. The central goal is to understand when model confidence is useful, when it fails, and how simple calibration methods such as temperature scaling can help.
+ResNet50 achieved the best classification performance, but reliability analysis revealed important differences between clean accuracy, calibration, robustness, threshold behavior, and uncertainty. Temperature scaling and TTA improved reliability, while study-level aggregation better matched the structure of the MURA dataset.
+
+The main takeaway is that confidence-aware evaluation can expose model behavior that ordinary accuracy metrics miss.
