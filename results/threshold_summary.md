@@ -1,0 +1,16 @@
+# Threshold Summary
+
+| backbone   | probability_type   | operating_point                      |   threshold |   accuracy |   precision |   recall_sensitivity |   specificity |     f1 |   true_negative |   false_positive |   false_negative |   true_positive |
+|:-----------|:-------------------|:-------------------------------------|------------:|-----------:|------------:|---------------------:|--------------:|-------:|----------------:|-----------------:|-----------------:|----------------:|
+| resnet18   | vanilla            | default_0.50                         |        0.5  |     0.8001 |      0.8383 |               0.7216 |        0.8722 | 0.7756 |            1454 |              213 |              426 |            1104 |
+| resnet18   | vanilla            | best_f1                              |        0.4  |     0.7939 |      0.7822 |               0.7889 |        0.7984 | 0.7856 |            1331 |              336 |              323 |            1207 |
+| resnet18   | vanilla            | sensitivity_ge_0.90_best_specificity |        0.2  |     0.7025 |      0.6319 |               0.9065 |        0.5153 | 0.7447 |             859 |              808 |              143 |            1387 |
+| resnet18   | temperature_scaled | default_0.50                         |        0.5  |     0.8001 |      0.8383 |               0.7216 |        0.8722 | 0.7756 |            1454 |              213 |              426 |            1104 |
+| resnet18   | temperature_scaled | best_f1                              |        0.45 |     0.8011 |      0.81   |               0.7634 |        0.8356 | 0.786  |            1393 |              274 |              362 |            1168 |
+| resnet18   | temperature_scaled | sensitivity_ge_0.90_best_specificity |        0.2  |     0.6825 |      0.6113 |               0.9242 |        0.4607 | 0.7359 |             768 |              899 |              116 |            1414 |
+| resnet50   | vanilla            | default_0.50                         |        0.5  |     0.8151 |      0.8922 |               0.698  |        0.9226 | 0.7833 |            1538 |              129 |              462 |            1068 |
+| resnet50   | vanilla            | best_f1                              |        0.3  |     0.8167 |      0.8134 |               0.8007 |        0.8314 | 0.807  |            1386 |              281 |              305 |            1225 |
+| resnet50   | vanilla            | sensitivity_ge_0.90_best_specificity |        0.1  |     0.6415 |      0.5767 |               0.9438 |        0.3641 | 0.7159 |             607 |             1060 |               86 |            1444 |
+| resnet50   | temperature_scaled | default_0.50                         |        0.5  |     0.8151 |      0.8922 |               0.698  |        0.9226 | 0.7833 |            1538 |              129 |              462 |            1068 |
+| resnet50   | temperature_scaled | best_f1                              |        0.35 |     0.8183 |      0.8234 |               0.7895 |        0.8446 | 0.8061 |            1408 |              259 |              322 |            1208 |
+| resnet50   | temperature_scaled | sensitivity_ge_0.90_best_specificity |        0.15 |     0.6512 |      0.5849 |               0.9346 |        0.3911 | 0.7195 |             652 |             1015 |              100 |            1430 |

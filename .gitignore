@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+
+# Data
+data/raw/
+data/metadata/
+*.zip
+
+# Model artifacts
+outputs/checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Large generated outputs
+outputs/predictions/
+
+# OS/editor
+.DS_Store
+._*
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
